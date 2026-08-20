@@ -1,6 +1,6 @@
-# EnerFL-Benchmarking
+# EnerFL Benchmarking
 
-This folder contains the EnerFL Flower app and a minimal TLS-enabled Docker setup.
+Reproducible experiments for measuring the performance, communication overhead, resource usage, energy consumption, and carbon emissions of federated learning workloads with EnerFL. The repository runs Flower workloads on HPC clusters using Singularity and supports Slurm and OAR schedulers.
 
 ## Getting the code
 
@@ -9,7 +9,6 @@ submodule at `enerfl/`. Clone with submodules:
 
 ```bash
 git clone --recurse-submodules <benchmarking-url>
-# already cloned without --recurse-submodules:
 git submodule update --init
 ```
 
@@ -20,37 +19,56 @@ git -C enerfl pull origin main
 git add enerfl && git commit -m "Bump enerfl"
 ```
 
-## Run
+## Run with Apptainer or Singularity on HPC
 
-From `examples/enerfl/server`:
+The experiments use SIF containers and work with either
+[Apptainer](https://apptainer.org/) or Singularity. Both runtimes work without
+a root daemon and are commonly available as environment modules on HPC
+clusters. The scheduler backend is pluggable: pick Slurm or OAR (Grid'5000)
+via `--scheduler` or `SCHEDULER` in `scripts/conf/cluster.conf`.
 
+### Build the SIF images
+
+Load the container runtime provided by the cluster, if it is exposed through
+environment modules:
+
+```bash
+module load apptainer
 ```
-docker compose up --build
+
+From the project root, build the server and client images with Apptainer:
+
+```bash
+apptainer build --fakeroot singularity/superlink.sif singularity/superlink.def
+apptainer build --fakeroot singularity/supernode.sif singularity/supernode.def
 ```
 
-From `examples/enerfl/client` (in another terminal):
-
-```
-docker compose up --build
-```
-
-## Run on HPC with Slurm/OAR + Singularity (recommended)
-
-Singularity is the standard container runtime on HPC clusters (no root daemon
-required, works with shared filesystems, MPI-friendly). The scheduler backend
-is pluggable — pick Slurm or OAR (Grid'5000) via `--scheduler` or
-`SCHEDULER` in `conf/cluster.conf`.
-
-### First-time setup: build SIF images
-
-From the project root on a node where `singularity build --fakeroot` is allowed:
+With Singularity, use the equivalent commands:
 
 ```bash
 singularity build --fakeroot singularity/superlink.sif singularity/superlink.def
 singularity build --fakeroot singularity/supernode.sif singularity/supernode.def
 ```
 
-Subsequent runs reuse the cached `.sif` files automatically.
+The build requires network access because the definition files use the
+`python:3.11-slim` Docker image and install Python dependencies from package
+indexes. It also requires either fakeroot support or root privileges. On a
+system without fakeroot, ask the cluster administrator to enable it or build
+the images on another compatible Linux host and transfer the resulting SIF
+files.
+
+Verify that both images were created and can be inspected:
+
+```bash
+apptainer inspect singularity/superlink.sif
+apptainer inspect singularity/supernode.sif
+```
+
+The experiment scripts use `singularity/superlink.sif` and
+`singularity/supernode.sif` by default. Override these locations with
+`SUPERLINK_SIF` and `SUPERNODE_SIF` in `scripts/conf/cluster.conf`. Subsequent
+runs reuse the existing images; rebuild them after changing either `.def`
+file or its dependencies.
 
 ### Configure the experiment matrix
 
@@ -69,9 +87,9 @@ bash submit_all_jobs.sh
 ```
 
 This regenerates `job_list.txt` from the matrix and then submits every
-combination one-at-a-time, chaining each run's orchestrator on the previous
-run's server job (same pattern as `run_intrusion_experiment.sh`). This is
-the only sane mode when the matrix is larger than the available partitions.
+combination one at a time, chaining each run's orchestrator on the previous
+run's server job. This prevents a large matrix from competing for the same
+cluster resources.
 
 For finer control, call `run_matrix_experiment.sh` directly:
 
