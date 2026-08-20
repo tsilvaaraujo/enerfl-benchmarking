@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "enerfl-benchmarking"
+version = "1.0.0"
+description = "Federated Learning with Energy Profiling (EnerFL)"
+license = { text = "Apache License 2.0" }
+dependencies = [
+    "flwr>=1.31.0",
+    "flwr-datasets[vision,audio]>=0.5.0",
+    "torch",
+    "torchvision",
+    "numpy",
+    "omegaconf>=2.3.0",
+    "codecarbon",
+]
+
+[project.optional-dependencies]
+llm = [
+    "transformers>=4.53.0",
+    "peft>=0.6.2",
+    "trl>=0.8.1",
+    "bitsandbytes>=0.41.0,<0.49.0",
+    "sentencepiece>=0.2.0",
+    "hf_transfer>=0.1.8",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["server.py", "client.py", "task.py", "llm_pipeline.py", "enerfl"]
+
+[tool.flwr.app]
+publisher = "enerfl"
+
+[tool.flwr.app.components]
+serverapp = "server:app"
+clientapp = "client:app"
+
+[tool.flwr.app.config]
+num-server-rounds = 5
+fraction-train = 1.0
+fraction-evaluate = 1.0
+profiler-enabled = true
+dataset.name = "flwrlabs/alpaca-gpt4"
+model.name = "openlm-research/open_llama_7b"
+model.quantization = 4
+model.gradient-checkpointing = true
+model.lora.peft-lora-r = 32
+model.lora.peft-lora-alpha = 64
+train.save-every-round = 5
+train.learning-rate-max = 5e-5
+train.learning-rate-min = 1e-6
+train.seq-length = 512
+train.training-arguments.output-dir = ""
+train.training-arguments.learning-rate = 0.0
+train.training-arguments.per-device-train-batch-size = 16
+train.training-arguments.gradient-accumulation-steps = 1
+train.training-arguments.logging-steps = 10
+train.training-arguments.num-train-epochs = 1
+train.training-arguments.max-steps = 10
+train.training-arguments.save-steps = 1000
+train.training-arguments.save-total-limit = 10
+train.training-arguments.gradient-checkpointing = true
+train.training-arguments.lr-scheduler-type = "constant"

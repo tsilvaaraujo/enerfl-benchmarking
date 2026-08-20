@@ -1,0 +1,69 @@
+Bootstrap: docker
+From: python:3.11-slim
+
+%labels
+    maintainer enerfl
+    version 1.31.0
+
+%post
+    pip install --no-cache-dir \
+        torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    pip install --no-cache-dir \
+        "flwr[simulation]" \
+        flwr-datasets \
+        omegaconf \
+        codecarbon \
+        transformers \
+        peft \
+        trl \
+        bitsandbytes \
+        accelerate \
+        sentencepiece
+    mkdir -p /state /project
+
+%environment
+    export PYTHONNOUSERSITE=1
+    export PYTHONPATH="/project:${PYTHONPATH:-}"
+
+%runscript
+    FLWR_LOG_LEVEL="${FLWR_LOG_LEVEL:-WARNING}" flower-superlink \
+        --insecure \
+        --isolation process \
+        --fleet-api-address 0.0.0.0:9092 \
+        --serverappio-api-address 0.0.0.0:9091 \
+        --control-api-address 0.0.0.0:9093 &
+    SUPERLINK_PID=$!
+
+    until python3 -c "import socket; s=socket.socket(); s.connect(('127.0.0.1',9093)); s.close()" 2>/dev/null; do sleep 1; done
+    sleep 5
+
+    flower-superexec \
+        --insecure \
+        --plugin-type serverapp \
+        --appio-api-address 127.0.0.1:9091 &
+    SUPEREXEC_PID=$!
+
+    echo "Waiting 30s for clients to connect..."
+    sleep 30
+
+    mkdir -p ~/.flwr
+    printf '[superlink.local-deployment]\naddress = "127.0.0.1:9093"\ninsecure = true\n' > ~/.flwr/config.toml
+
+    cd /project
+
+    case "${PROFILER_MODE:-on}" in
+        off|false|0) RUN_CONFIG="profiler-enabled=false" ;;
+        *)           RUN_CONFIG="profiler-enabled=true" ;;
+    esac
+
+    echo "Starting flwr run (PROFILER_MODE=${PROFILER_MODE:-on})..."
+    flwr run . local-deployment --run-config "${RUN_CONFIG}" --stream
+    FLWR_EXIT=$?
+    echo "flwr run exited with code ${FLWR_EXIT}"
+
+    kill "${SUPEREXEC_PID}" 2>/dev/null || true
+    kill "${SUPERLINK_PID}" 2>/dev/null || true
+    wait "${SUPEREXEC_PID}" 2>/dev/null || true
+    wait "${SUPERLINK_PID}" 2>/dev/null || true
+
+    exit "${FLWR_EXIT}"

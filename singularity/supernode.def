@@ -1,0 +1,35 @@
+Bootstrap: docker
+From: python:3.11-slim
+
+%labels
+    maintainer enerfl
+    version 1.31.0
+    description "Flower SuperNode for EnerFL client nodes"
+
+%post
+    pip install --no-cache-dir \
+        torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    pip install --no-cache-dir \
+        "flwr[simulation]" \
+        flwr-datasets \
+        omegaconf \
+        codecarbon \
+        transformers \
+        peft \
+        trl \
+        bitsandbytes \
+        accelerate \
+        sentencepiece
+    mkdir -p /project
+
+%environment
+    export PYTHONNOUSERSITE=1
+    export PYTHONPATH="/project:${PYTHONPATH:-}"
+
+%runscript
+    FLWR_LOG_LEVEL="${FLWR_LOG_LEVEL:-WARNING}" flower-supernode \
+        --insecure \
+        --superlink             "${SUPERLINK_IP}:9092" \
+        --clientappio-api-address 0.0.0.0:9094 \
+        --isolation             subprocess \
+        --node-config           "partition-id=${PARTITION_ID} num-partitions=${NUM_PARTITIONS}"
