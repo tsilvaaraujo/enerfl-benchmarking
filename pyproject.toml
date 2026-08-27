@@ -39,6 +39,7 @@ clientapp = "client:app"
 
 [tool.flwr.app.config]
 num-server-rounds = 5
+round-timeout = 7200.0
 fraction-train = 1.0
 fraction-evaluate = 1.0
 profiler-enabled = true

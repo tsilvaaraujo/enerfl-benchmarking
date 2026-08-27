@@ -65,6 +65,7 @@ def _get_llm_evaluate_fn(cfg, save_every_round: int, total_rounds: int, save_pat
 @app.main()
 def main(grid: Grid, context) -> None:
     num_rounds = context.run_config.get("num-server-rounds", 5)
+    round_timeout = float(context.run_config.get("round-timeout", 3600.0))
     fraction_train = context.run_config.get("fraction-train", 1.0)
     fraction_eval = context.run_config.get("fraction-evaluate", 0.0)
     profiler_enabled = bool(context.run_config.get("profiler-enabled", True))
@@ -98,6 +99,7 @@ def main(grid: Grid, context) -> None:
             grid=grid,
             initial_arrays=initial_arrays,
             num_rounds=num_rounds,
+            timeout=round_timeout,
             train_config=ConfigRecord({"save_path": save_path}),
             evaluate_config=ConfigRecord(),
             evaluate_fn=evaluate_fn,
@@ -110,6 +112,7 @@ def main(grid: Grid, context) -> None:
         grid=grid,
         initial_arrays=initial_arrays,
         num_rounds=num_rounds,
+        timeout=round_timeout,
         train_config=ConfigRecord(),
         evaluate_config=ConfigRecord(),
     )
