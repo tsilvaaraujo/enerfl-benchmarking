@@ -9,6 +9,7 @@ from llm_pipeline import (
     build_training_arguments,
     build_llm_config,
     cosine_annealing,
+    evaluate_llm,
     get_llm_model,
     get_tokenizer_and_data_collator,
     load_llm_data,
@@ -76,7 +77,7 @@ def train(msg: Message, context: Context):
         num_rounds = context.run_config.get("num-server-rounds", 1)
 
         with cp.stage("data_loading"):
-            trainset = load_llm_data(partition_id, num_partitions, cfg.dataset.name)
+            trainset, _ = load_llm_data(partition_id, num_partitions, cfg.dataset.name)
             tokenizer, formatting_func = get_tokenizer_and_data_collator(cfg.model.name)
 
         with cp.stage("model_creation"):
@@ -191,9 +192,51 @@ def evaluate(msg: Message, context: Context):
     profiler_enabled = bool(context.run_config.get("profiler-enabled", True))
 
     if _is_llm_run():
-        metrics = {"num-examples": 0}
+        os.environ.setdefault("TOKENIZERS_PARALLELISM", "true")
+        cp = ClientProfiler(
+            enable_carbon=True,
+            algorithm_name=algo_name,
+            enabled=profiler_enabled,
+            country_iso_code="FRA",
+        )
+
+        cfg = build_llm_config(context.run_config)
+        partition_id = context.node_config.get("partition-id", 0)
+        num_partitions = context.node_config.get("num-partitions", 1)
+
+        with cp.stage("data_loading"):
+            _, evalset = load_llm_data(partition_id, num_partitions, cfg.dataset.name)
+            tokenizer, formatting_func = get_tokenizer_and_data_collator(cfg.model.name)
+
+        with cp.stage("model_creation"):
+            model = get_llm_model(cfg.model)
+
+        with cp.stage("model_deserialization"):
+            set_llm_state(model, msg.content["arrays"].to_torch_state_dict())
+
+        with cp.stage("local_evaluation"):
+            training_args = build_training_arguments(cfg, "")
+            eval_metrics = evaluate_llm(
+                model=model,
+                tokenizer=tokenizer,
+                formatting_func=formatting_func,
+                training_args=training_args,
+                evalset=evalset,
+                seq_length=cfg.train.seq_length,
+            )
+            eval_loss = float(eval_metrics.get("eval_loss", 0.0))
+
+        metrics = {
+            "num-examples": len(evalset),
+            "test_logloss": eval_loss,
+        }
+        metrics.update(cp.to_metric_record())
         metric_record = MetricRecord(metrics)
         content = RecordDict({"metrics": metric_record})
+
+        if show_profiler_summary:
+            cp.summary()
+
         return Message(content=content, reply_to=msg)
 
     cp = ClientProfiler(

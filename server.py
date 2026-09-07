@@ -70,8 +70,6 @@ def main(grid: Grid, context) -> None:
     fraction_eval = context.run_config.get("fraction-evaluate", 0.0)
     profiler_enabled = bool(context.run_config.get("profiler-enabled", True))
     algo_name = os.environ.get("ALGO", "FedAvg")
-    if _is_llm_run():
-        fraction_eval = 0.0
 
     strategy = _build_strategy(algo_name, fraction_train, fraction_eval)
 

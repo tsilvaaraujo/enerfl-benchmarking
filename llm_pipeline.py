@@ -70,10 +70,11 @@ def load_llm_data(partition_id: int, num_partitions: int, dataset_name: str):
             partitioners={"train": partitioner},
             trust_remote_code=True,
         )
-    client_trainset = FDS.load_partition(partition_id, "train")
-    if "output" in client_trainset.column_names:
-        client_trainset = client_trainset.rename_column("output", "response")
-    return client_trainset
+    client_data = FDS.load_partition(partition_id, "train")
+    if "output" in client_data.column_names:
+        client_data = client_data.rename_column("output", "response")
+    split = client_data.train_test_split(test_size=0.2, seed=42)
+    return split["train"], split["test"]
 
 
 def cosine_annealing(
@@ -161,3 +162,22 @@ def train_llm(
         formatting_func=formatting_func,
     )
     return trainer.train()
+
+
+def evaluate_llm(
+    model,
+    tokenizer,
+    formatting_func,
+    training_args: SFTConfig,
+    evalset,
+    seq_length: int,
+):
+    training_args.max_seq_length = seq_length
+    trainer = SFTTrainer(
+        model=model,
+        processing_class=tokenizer,
+        args=training_args,
+        eval_dataset=evalset,
+        formatting_func=formatting_func,
+    )
+    return trainer.evaluate()
