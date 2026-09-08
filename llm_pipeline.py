@@ -177,6 +177,7 @@ def evaluate_llm(
         model=model,
         processing_class=tokenizer,
         args=training_args,
+        train_dataset=evalset,
         eval_dataset=evalset,
         formatting_func=formatting_func,
     )
