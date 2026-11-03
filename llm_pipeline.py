@@ -1,5 +1,6 @@
 import math
 import os
+import tempfile
 from datetime import datetime
 from typing import Any
 
@@ -130,6 +131,10 @@ def set_llm_state(model, arrays) -> None:
 
 def build_training_arguments(cfg: DictConfig, save_path: str) -> SFTConfig:
     args_dict = dict(cfg.train.training_arguments)
+
+    if not save_path:
+        save_path = os.path.join(tempfile.gettempdir(), "enerfl-trainer")
+    os.makedirs(save_path, exist_ok=True)
     args_dict["output_dir"] = save_path
     if not torch.cuda.is_available():
         args_dict.setdefault("bf16", False)
